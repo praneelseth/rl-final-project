@@ -58,6 +58,7 @@ class StudentConfig:
     learning_rate: float = 3e-4
     distill_coef: float = 1.0
     behavior_cloning_coef: float = 0.25
+    warmstart_behavior_cloning_steps: int = 5_000
 
 
 @dataclass
@@ -70,6 +71,7 @@ class TrainingConfig:
     student_updates_per_step: int = 1
     eval_every: int = 2_000
     eval_episodes: int = 5
+    max_eval_steps: int = 1000
     log_every: int = 100
     checkpoint_every: int = 2_000
     work_dir: str = "runs/antmaze-medium"
@@ -114,4 +116,3 @@ def load_config(path: str | Path) -> ProjectConfig:
         student=_merge_dataclass(StudentConfig, raw.get("student")),
         training=_merge_dataclass(TrainingConfig, raw.get("training")),
     )
-

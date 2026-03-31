@@ -73,8 +73,20 @@ def eval_command(args: argparse.Namespace) -> None:
 
     teacher_action_fn = lambda obs: teacher.sample_actions(obs, deterministic=True)
     student_action_fn = lambda obs: student.actor(obs)
-    teacher_metrics = evaluate_policy(env, teacher_action_fn, device, episodes=cfg.training.eval_episodes)
-    student_metrics = evaluate_policy(env, student_action_fn, device, episodes=cfg.training.eval_episodes)
+    teacher_metrics = evaluate_policy(
+        env,
+        teacher_action_fn,
+        device,
+        episodes=cfg.training.eval_episodes,
+        max_steps=cfg.training.max_eval_steps,
+    )
+    student_metrics = evaluate_policy(
+        env,
+        student_action_fn,
+        device,
+        episodes=cfg.training.eval_episodes,
+        max_steps=cfg.training.max_eval_steps,
+    )
     latency = measure_latency_ms(teacher_action_fn, replay.obs[:32].to(device), repeats=20)
     student_latency = measure_latency_ms(student_action_fn, replay.obs[:32].to(device), repeats=20)
 
@@ -103,4 +115,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

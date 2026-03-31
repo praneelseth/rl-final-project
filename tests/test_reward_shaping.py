@@ -1,7 +1,8 @@
 import numpy as np
+import torch
 
 from aca_distill.config import RewardConfig
-from aca_distill.data.antmaze import antmaze_success, flatten_antmaze_observation, shaped_reward
+from aca_distill.data.antmaze import OfflineReplayBuffer, antmaze_success, flatten_antmaze_observation, shaped_reward
 
 
 def test_flatten_antmaze_observation_concatenates_goal_fields():
@@ -29,3 +30,19 @@ def test_progress_reward_increases_when_agent_moves_toward_goal():
     assert shaped_reward(obs, next_obs, 0.0, cfg) > 0.0
     assert antmaze_success(obs, next_obs, 0.0) == 0.0
 
+
+def test_replay_buffer_returns_scalar_rewards_and_dones():
+    replay = OfflineReplayBuffer(
+        obs=torch.randn(10, 4),
+        action=torch.randn(10, 2),
+        reward=torch.randn(10),
+        next_obs=torch.randn(10, 4),
+        done=torch.zeros(10),
+        success=torch.zeros(10),
+        observation_mean=None,
+        observation_std=None,
+    )
+    batch = replay.sample(batch_size=3, device=torch.device("cpu"))
+    assert batch["reward"].shape == (3,)
+    assert batch["done"].shape == (3,)
+    assert batch["success"].shape == (3,)

@@ -25,6 +25,7 @@ def evaluate_policy(
     action_fn: Callable[[torch.Tensor], torch.Tensor],
     device: torch.device,
     episodes: int = 5,
+    max_steps: int = 1000,
 ) -> dict[str, float]:
     returns: list[float] = []
     successes: list[float] = []
@@ -33,12 +34,14 @@ def evaluate_policy(
         obs, info = env.reset()
         total_reward = 0.0
         done = False
-        while not done:
+        steps = 0
+        while not done and steps < max_steps:
             obs_tensor = torch.from_numpy(np.asarray(obs, dtype=np.float32)).unsqueeze(0).to(device)
             action = action_fn(obs_tensor).squeeze(0).detach().cpu().numpy()
             obs, reward, terminated, truncated, info = env.step(action)
             done = bool(terminated or truncated)
             total_reward += float(reward)
+            steps += 1
 
         returns.append(total_reward)
         successes.append(float(info.get("success", total_reward > 0.0)))
@@ -73,4 +76,3 @@ def collect_rollout_artifacts(
         "positions": np.asarray(positions, dtype=np.float32),
         "actions": np.asarray(actions, dtype=np.float32),
     }
-

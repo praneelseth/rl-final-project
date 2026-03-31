@@ -67,8 +67,20 @@ class OfflineAntMazeTrainer:
         except Exception as exc:
             return {"eval/skipped": 1.0, "eval/error": 1.0}
 
-        teacher_metrics = evaluate_policy(env, self._teacher_action_fn(), self.device, episodes=self.cfg.training.eval_episodes)
-        student_metrics = evaluate_policy(env, self._student_action_fn(), self.device, episodes=self.cfg.training.eval_episodes)
+        teacher_metrics = evaluate_policy(
+            env,
+            self._teacher_action_fn(),
+            self.device,
+            episodes=self.cfg.training.eval_episodes,
+            max_steps=self.cfg.training.max_eval_steps,
+        )
+        student_metrics = evaluate_policy(
+            env,
+            self._student_action_fn(),
+            self.device,
+            episodes=self.cfg.training.eval_episodes,
+            max_steps=self.cfg.training.max_eval_steps,
+        )
         sample_obs = self.replay.obs[:32].to(self.device)
         latency_teacher = measure_latency_ms(self._teacher_action_fn(), sample_obs, repeats=20)
         latency_student = {
@@ -91,8 +103,11 @@ class OfflineAntMazeTrainer:
             for _ in range(self.cfg.training.teacher_updates_per_step):
                 averager.update(self.teacher.update(batch, student_action=student_action))
 
-            with torch.no_grad():
-                teacher_action = self.teacher.sample_actions(batch["obs"], deterministic=True)
+            if step <= self.cfg.student.warmstart_behavior_cloning_steps:
+                teacher_action = None
+            else:
+                with torch.no_grad():
+                    teacher_action = self.teacher.sample_actions(batch["obs"], deterministic=True)
             for _ in range(self.cfg.training.student_updates_per_step):
                 averager.update(
                     self.student.update(
@@ -113,4 +128,3 @@ class OfflineAntMazeTrainer:
             if step % self.cfg.training.checkpoint_every == 0:
                 save_checkpoint(self.work_dir / "checkpoints" / f"step_{step}.pt", self._checkpoint_payload(step))
                 save_checkpoint(self.work_dir / "checkpoints" / "latest.pt", self._checkpoint_payload(step))
-

@@ -90,10 +90,10 @@ class OfflineReplayBuffer:
         return {
             "obs": self.obs[indices].to(device),
             "action": self.action[indices].to(device),
-            "reward": self.reward[indices].to(device),
+            "reward": self.reward[indices].to(device).squeeze(-1),
             "next_obs": self.next_obs[indices].to(device),
-            "done": self.done[indices].to(device),
-            "success": self.success[indices].to(device),
+            "done": self.done[indices].to(device).squeeze(-1),
+            "success": self.success[indices].to(device).squeeze(-1),
         }
 
 
@@ -138,9 +138,9 @@ def load_antmaze_dataset(cfg: DatasetConfig, reward_cfg: RewardConfig) -> Offlin
     obs_array = np.asarray(obs_list, dtype=np.float32)
     next_obs_array = np.asarray(next_obs_list, dtype=np.float32)
     action_array = np.asarray(action_list, dtype=np.float32)
-    reward_array = np.asarray(reward_list, dtype=np.float32).reshape(-1, 1)
-    done_array = np.asarray(done_list, dtype=np.float32).reshape(-1, 1)
-    success_array = np.asarray(success_list, dtype=np.float32).reshape(-1, 1)
+    reward_array = np.asarray(reward_list, dtype=np.float32)
+    done_array = np.asarray(done_list, dtype=np.float32)
+    success_array = np.asarray(success_list, dtype=np.float32)
 
     mean_tensor: torch.Tensor | None = None
     std_tensor: torch.Tensor | None = None
@@ -162,4 +162,3 @@ def load_antmaze_dataset(cfg: DatasetConfig, reward_cfg: RewardConfig) -> Offlin
         observation_mean=mean_tensor,
         observation_std=std_tensor,
     )
-

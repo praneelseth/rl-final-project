@@ -16,11 +16,14 @@ class StudentDistillation:
     def update(
         self,
         obs: torch.Tensor,
-        teacher_action: torch.Tensor,
+        teacher_action: torch.Tensor | None,
         dataset_action: torch.Tensor,
     ) -> dict[str, float]:
         prediction = self.actor(obs)
-        distill_loss = F.mse_loss(prediction, teacher_action)
+        if teacher_action is None:
+            distill_loss = torch.zeros((), device=obs.device)
+        else:
+            distill_loss = F.mse_loss(prediction, teacher_action)
         bc_loss = F.mse_loss(prediction, dataset_action)
         total = self.cfg.distill_coef * distill_loss + self.cfg.behavior_cloning_coef * bc_loss
 
@@ -32,4 +35,3 @@ class StudentDistillation:
             "student/distill_loss": distill_loss.item(),
             "student/bc_loss": bc_loss.item(),
         }
-

@@ -41,6 +41,7 @@ student:
   learning_rate: 0.0003
   distill_coef: 1.0
   behavior_cloning_coef: 0.25
+  warmstart_behavior_cloning_steps: 5000
 
 training:
   seed: 11
@@ -51,6 +52,7 @@ training:
   student_updates_per_step: 1
   eval_every: 3000
   eval_episodes: 5
+  max_eval_steps: 1000
   log_every: 100
   checkpoint_every: 3000
   work_dir: runs/antmaze-large
