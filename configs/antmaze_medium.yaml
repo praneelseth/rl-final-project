@@ -1,0 +1,56 @@
+experiment_name: antmaze-medium
+
+dataset:
+  dataset_id: D4RL/antmaze/medium-diverse-v1
+  eval_dataset_id: D4RL/antmaze/medium-diverse-v1
+  normalize_observations: true
+  reward_mode: shaped
+  max_episodes: null
+  download: true
+
+reward:
+  mode: progress
+  distance_scale: 1.0
+  success_bonus: 1.0
+  step_penalty: 0.0
+  clip_value: 5.0
+
+diffusion:
+  steps: 20
+  beta_start: 0.0001
+  beta_end: 0.02
+  guidance_scale: 30.0
+  batch_action_samples: 8
+  gradient_epsilon: 1.0e-6
+
+teacher:
+  hidden_dim: 256
+  hidden_layers: 3
+  time_embedding_dim: 32
+  learning_rate: 0.001
+  discount: 0.99
+  tau: 0.005
+  consistency_coef: 1.0
+  conservative_coef: 0.1
+  conservative_actions: 8
+  action_l2_coef: 1.0e-4
+
+student:
+  hidden_dim: 256
+  hidden_layers: 3
+  learning_rate: 0.0003
+  distill_coef: 1.0
+  behavior_cloning_coef: 0.25
+
+training:
+  seed: 7
+  device: auto
+  batch_size: 256
+  total_steps: 20000
+  teacher_updates_per_step: 1
+  student_updates_per_step: 1
+  eval_every: 2000
+  eval_episodes: 5
+  log_every: 100
+  checkpoint_every: 2000
+  work_dir: runs/antmaze-medium

@@ -1,0 +1,46 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aca-distill"
+version = "0.1.0"
+description = "Offline-first AntMaze research codebase for Actor-Critic without Actor distillation."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "numpy>=1.26",
+  "torch>=2.2",
+  "PyYAML>=6.0",
+  "tqdm>=4.66",
+]
+
+[project.optional-dependencies]
+rl = [
+  "gymnasium>=1.0",
+  "gymnasium-robotics>=1.3",
+  "minari>=0.5.3",
+  "mujoco>=3.2",
+]
+viz = [
+  "matplotlib>=3.8",
+  "seaborn>=0.13",
+  "pandas>=2.2",
+  "scikit-learn>=1.5",
+]
+dev = [
+  "pytest>=8.1",
+]
+
+[project.scripts]
+aca-distill = "aca_distill.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-p no:rerunfailures"
