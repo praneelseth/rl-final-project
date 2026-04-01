@@ -1,5 +1,7 @@
 # ACA Distillation for AntMaze
 
+https://github.com/praneelseth/rl-final-project
+
 This repository implements the project proposed in the RL milestone document: adapt the 2025 Actor-Critic without Actor (ACA) idea into an AntMaze setting, then distill the teacher's iterative action-selection process into a fast single-pass student policy.
 
 The central question is:
@@ -120,7 +122,7 @@ Why flatten it:
 
 ## Reward Design
 
-Yes, there is an explicit reward design in this repo.
+There is an explicit reward design in this repo.
 
 The project proposal asked for sparse-goal evaluation with light shaping during training if that is simpler. That is exactly what the current code does.
 
