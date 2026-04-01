@@ -1,4 +1,4 @@
-# Milestone Report: ACA Distillation on AntMaze
+# Milestone Report: Prior-Guided ACA Distillation on AntMaze
 
 ## Project Goal
 
@@ -7,255 +7,314 @@ The goal of this project is to adapt Actor-Critic without Actor (ACA) to the Ant
 The intended contribution has two parts:
 
 - an RL contribution: test whether an ACA-style critic-guided policy can learn useful goal-reaching behavior in AntMaze
-- a systems contribution: measure the performance-latency tradeoff between the iterative ACA teacher and the distilled student
+- a systems contribution: measure the performance-latency tradeoff between iterative ACA-style action generation and fast feedforward policies
 
-## Current Experimental Setup
+## What Was Run In This Milestone
 
-The current implementation is an offline-first AntMaze pipeline:
+The latest notebook run used the updated prior-guided offline ACA pipeline rather than the earlier critic-only version.
 
-- dataset: `D4RL/antmaze/medium-diverse-v1` through Minari
-- teacher: timestep-conditioned ACA-style critic `Q(s, a_t, t)` with critic-guided denoising
-- student: MLP actor trained with distillation loss and behavior cloning regularization
-- training reward: sparse dataset reward plus light progress-based shaping
-- evaluation: sparse success rate and return in the recovered AntMaze environment
+The training recipe in the notebook was:
+
+- dataset: `D4RL/antmaze/medium-diverse-v1`
+- prior pretraining steps: `8000`
+- teacher/student training steps: `20000`
+- evaluation every `2000` steps
+- evaluation episodes: `5`
+- work directory: `runs/antmaze-medium-prior-guided-colab`
+
+The current pipeline contains three learned policies:
+
+- Prior: a behavior cloning policy trained directly on the dataset
+- Teacher: a prior-guided ACA-style implicit policy with denoising and twin critics
+- Student: an MLP policy distilled from the teacher while staying behavior-cloned to the data
 
 ## Current Results
 
-The most recent run used the default medium config with 40,000 training steps.
+Final evaluation at step `20000`:
 
-Final evaluation results:
-
+- prior return mean: `0.0`
+- prior success rate: `0.0`
 - teacher return mean: `0.0`
 - teacher success rate: `0.0`
 - student return mean: `0.0`
 - student success rate: `0.0`
-- teacher mean latency: `11.35 ms`
-- student mean latency: `0.076 ms`
-- teacher-to-student latency ratio: approximately `150x`
 
-Training metrics at the end of the run:
+Final latency:
 
-- teacher total loss: approximately `148.53`
-- teacher TD loss: approximately `148.26`
-- teacher consistency loss: approximately `0.175`
-- teacher conservative loss: approximately `1.90`
-- student total loss: approximately `0.545`
-- student BC loss: approximately `0.271`
-- student distillation loss: approximately `0.409`
+- prior mean latency: `0.0758 ms`
+- teacher mean latency: `17.49 ms`
+- student mean latency: `0.0750 ms`
+- teacher-to-student latency ratio: approximately `233x`
+
+Final training metrics:
+
+- teacher total loss: approximately `35.78`
+- teacher TD loss: approximately `26.09`
+- teacher consistency loss: approximately `9.29`
+- teacher conservative loss: approximately `2.03`
+- student total loss: approximately `0.120`
+- student BC loss: approximately `0.109`
+- student distillation loss: approximately `0.0111`
+
+## What The Plots Show
+
+The milestone notebook contains two main plot groups.
+
+### 1. Prior / teacher / student training curves
+
+The loss curves suggest that optimization is much healthier than in the earlier runs:
+
+- the prior BC pretraining completes cleanly
+- the teacher loss is now on the order of tens rather than exploding into the hundreds
+- the student losses are low and stable
+- the student distillation loss is much lower than the student BC loss by the end of training
+
+This is an improvement over the earlier version of the project, where the teacher loss was much larger and more unstable.
+
+### 2. Success / return / latency curves
+
+The evaluation plots show a much less encouraging picture:
+
+- prior success stays at `0.0`
+- teacher success stays at `0.0`
+- student success stays at `0.0`
+- prior, teacher, and student return all remain `0.0`
+- teacher latency is consistently far higher than either the prior or student latency
+
+So the new method improved optimization behavior but did not improve actual task performance.
 
 ## What These Results Mean
 
-The main positive result is that the distilled student is dramatically faster than the teacher at inference time. The student is roughly two orders of magnitude faster, which supports the motivation for distillation from a deployment perspective.
+The most honest summary is:
 
-However, the control performance is currently unsuccessful:
+- the optimization problem looks more stable
+- the control problem is still unsolved
 
-- neither the teacher nor the student achieves nonzero success rate
-- neither model achieves nonzero return
-- the teacher does not appear to learn a useful AntMaze control policy
-- because the teacher is weak, the student does not receive useful supervision
+This matters because it separates two questions:
 
-This means the project currently demonstrates the latency side of the tradeoff, but not the performance side.
+1. Is the training pipeline numerically healthier now?
+2. Does the learned policy actually solve AntMaze?
 
-## Why BC Appears Better Than Distillation
+The answer appears to be:
 
-In separate runs and from the training curves, behavior cloning appears to perform better than teacher distillation.
+- yes for the first question
+- no for the second question
 
-That is plausible for the current codebase because:
+That is still a useful research outcome. It suggests that the original failure was not only due to a coding bug or training instability. Even after making the method more offline-correct and behavior-regularized, AntMaze medium-diverse still appears too difficult for the current ACA adaptation.
 
-- the student BC loss is lower than the student distillation loss
-- the dataset actions are likely better supervision than the current teacher actions
-- if the teacher is not learning useful behavior, then distillation actively teaches the student the wrong target
+## Comparison To The Earlier Version
 
-In other words, the current teacher is not yet a good teacher. Under those conditions, behavior cloning is a stronger baseline than teacher imitation.
+Compared with the earlier milestone attempt:
 
-This is actually an informative result:
+- the project now includes a BC prior
+- the teacher is prior-guided rather than pure critic-guided from Gaussian noise
+- the teacher uses twin critics instead of a single critic
+- reward scaling is closer to ACA
+- the teacher loss is much smaller and more stable
+- the student distillation loss is now very low
 
-- distillation only helps if the teacher is better than the supervised baseline
-- in offline sparse long-horizon AntMaze, that condition currently does not hold
+However:
+
+- all three policies still achieve zero return and zero success
+- the prior itself is not solving the task
+- the teacher is not outperforming the prior
+- the student is not outperforming either one
+
+This means the new result is not “the method works.” The new result is:
+
+the updated method trains more stably, but stability alone is not enough to produce useful AntMaze behavior.
+
+## Why The Student Distillation Loss Is Low But Performance Is Still Bad
+
+One interesting feature of the new run is that the student distillation loss is very small:
+
+- student distillation loss: about `0.011`
+- student BC loss: about `0.109`
+
+This likely means the student is doing a good job matching the teacher's action outputs.
+
+But that does not imply the student is good at the task. It only implies:
+
+- teacher and student are behaviorally similar in action space
+- both may still be producing poor actions for goal-reaching
+
+This is an important lesson for the project:
+
+- low distillation error is not enough
+- the teacher must actually be better than the baseline policy before distillation becomes valuable
 
 ## Main Problems Observed
 
-### 1. The teacher is still not learning useful AntMaze behavior
+### 1. The prior itself does not solve the task
 
-The strongest evidence is simple:
+The BC prior has:
 
-- success rate stays at `0.0`
-- return stays at `0.0`
-- teacher TD loss remains very large late in training
+- return `0.0`
+- success `0.0`
 
-The teacher loss is dominated by the TD term rather than the consistency or conservative terms. That suggests the core value-learning problem is not being solved.
+That means the dataset policy induced by simple BC is already failing on this evaluation setting. If the prior is weak, then the prior-guided teacher starts from a poor base policy.
 
-### 2. Offline ACA is likely unstable in sparse long-horizon AntMaze
+### 2. The teacher is not improving over the prior
 
-ACA was introduced as an online MuJoCo method. AntMaze is different in several important ways:
+The teacher was supposed to refine the prior through critic-guided denoising. But in this run:
 
-- it is sparse reward
-- it is long horizon
-- it is goal-conditioned
-- offline bootstrapping is especially brittle
+- teacher return remains `0.0`
+- teacher success remains `0.0`
 
-This means a direct ACA-style adaptation may be fundamentally much harder than expected, especially with a single critic and lightweight offline regularization.
+So the teacher is not converting the prior into a stronger controller.
 
-### 3. The teacher targets may still be too poor for distillation
+### 3. The student is faithfully imitating a weak teacher
 
-Even after stabilizing parts of the training loop, the student still appears to trust teacher actions that are worse than the dataset actions. The gap between BC loss and distillation loss reflects that.
+The student distillation loss is small, which means the student is learning the teacher's action outputs. But because the teacher itself is not good, this gives no control benefit.
 
-The likely failure mode is:
+### 4. AntMaze medium-diverse may simply be too hard for this setup
 
-- the critic does not provide a reliable gradient field
-- denoising does not produce high-value actions
-- the student receives noisy or misleading action targets
+This task is:
 
-### 4. The current evaluation is showing failure honestly
+- sparse reward
+- long horizon
+- offline
+- high-dimensional
+- goal-conditioned
 
-This is important for interpretation. The current evaluation is not hiding the problem:
+That is a very demanding regime. ACA was introduced primarily in online MuJoCo settings, not offline sparse long-horizon maze navigation.
 
-- there is no artificial success inflation
-- sparse-goal evaluation remains at zero
-- the run is correctly telling us that the current method is not yet solving the environment
+## Likely Technical Reasons It Is Still Failing
 
-That makes the result disappointing, but scientifically useful.
+The most likely reasons are:
 
-## Likely Technical Causes
+- the BC prior is too weak to serve as a useful anchor
+- the critic is still not learning a value field that meaningfully improves actions
+- reward shaping is still not enough to turn AntMaze into an easy offline value-learning problem
+- the current observation encoder and MLPs may be too simple for the navigation + locomotion structure
+- medium-diverse may require stronger offline RL methods than this ACA adaptation currently provides
 
-The most likely causes of failure at this stage are:
+Another important possibility is evaluation mismatch:
 
-- ACA was not originally designed for offline sparse long-horizon AntMaze
-- the teacher uses a single critic rather than a more stable double-Q setup
-- the offline regularization is lightweight and may not be strong enough
-- the reward shaping may still be too weak to produce a learnable critic
-- the teacher action sampling may be too noisy or too far out of the dataset support
-- the student is being asked to imitate a teacher that has not surpassed behavior cloning
+- BC on offline AntMaze often needs careful implementation choices to show success
+- if the prior cannot solve the task, the teacher has very little chance to do better
 
-There may also be a representation issue:
+## What Worked In This Milestone
 
-- AntMaze combines navigation and locomotion
-- a simple flattened observation MLP may be insufficient to learn a useful implicit policy through critic gradients alone
+Even though the task performance is still zero, some parts of the project did succeed:
+
+- the codebase now supports a prior-guided offline ACA variant
+- the three-policy comparison is now explicit: prior vs teacher vs student
+- the training curves are much healthier than before
+- the student preserves the teacher's action outputs closely
+- the latency comparison is very strong
+
+The latency result is especially clear:
+
+- teacher: `17.49 ms`
+- student: `0.075 ms`
+
+So if a stronger teacher can eventually be learned, distillation would likely provide a real systems benefit.
 
 ## What I Would Try Next
 
-The next fixes and experiments I would prioritize are:
+The next experiments I would prioritize are:
 
-1. Add a pure behavior cloning baseline and report it explicitly alongside teacher and student.
-2. Add stronger offline RL baselines such as IQL or CQL for comparison.
-3. Replace the single critic with a double-critic architecture.
-4. Increase the strength of dataset support constraints during teacher sampling.
-5. Try a simpler environment first, such as Maze2D or smaller AntMaze variants, before medium-diverse.
-6. Evaluate teacher denoising quality directly on dataset states rather than only through full environment rollout.
-7. Separate the project into two questions:
-   - can ACA learn useful actions offline in AntMaze at all?
-   - if yes, does distillation preserve those actions?
+1. Benchmark pure BC explicitly and carefully as a main baseline.
+2. Add strong offline RL baselines such as IQL and CQL.
+3. Move to an easier environment before AntMaze medium-diverse:
+   - Maze2D
+   - smaller AntMaze variants
+   - or AntMaze umaze
+4. Test whether the teacher improves over the prior on dataset states before requiring full rollout success.
+5. Try online fine-tuning after prior initialization instead of pure offline learning.
+6. Improve representations:
+   - better goal-conditioning
+   - larger networks
+   - potentially separate encoders for state and goal
 
-The most important immediate step is to establish a strong baseline ladder:
+The most important next question is:
 
-- BC
-- IQL or CQL
-- ACA teacher
-- distilled student
+Can ACA improve a prior policy at all in a simpler or partially online setting?
 
-Without that ladder, it is hard to interpret whether ACA is underperforming because the implementation is weak or because the problem setting is a poor fit for ACA.
+Right now, the answer on offline AntMaze medium-diverse appears to be no.
 
-## Recommended Interpretation For The Milestone
+## Recommended Interpretation For Submission
 
 A fair milestone interpretation is:
 
-- the ACA-style teacher and distilled student pipeline has been implemented end to end
-- the latency comparison works and shows a strong speedup for the student
-- the current ACA adaptation does not yet achieve useful AntMaze performance
-- behavior cloning currently appears stronger than distillation, which suggests the teacher has not yet become better than the dataset policy
+- the project successfully implemented a prior-guided ACA teacher, BC prior, and distilled student
+- the updated method is significantly more stable than the earlier version
+- despite better optimization behavior, none of the three policies solved AntMaze medium-diverse in the current offline setting
+- the student achieves essentially the same latency as the BC prior and is over `200x` faster than the teacher
+- the core unresolved issue is not distillation itself, but the inability of the teacher to outperform the prior
 
-This is a valid milestone result because it narrows the research question:
-
-- the difficulty is no longer “can we code it?”
-- the difficulty is now “is ACA actually well-suited for offline sparse long-horizon AntMaze?”
+That is a useful milestone because it sharpens the real research question.
 
 ## Possible Project Pivot
 
-Given the current results, a good pivot would be to turn the project into a study of **where ACA fails or succeeds outside the setting it was originally introduced for**.
+Based on these results, the most interesting pivot is:
 
-That pivot is still closely related to ACA and arguably more interesting scientifically.
+study whether ACA can improve a behavior prior in settings outside the online MuJoCo regime where it was originally proposed.
 
-### Pivot Option 1: ACA on offline sparse long-horizon control
+That can be framed in several ways.
 
-New question:
-
-How does ACA behave when transferred from online MuJoCo benchmarks to offline sparse-reward goal-conditioned tasks such as AntMaze?
-
-This is interesting because the original ACA paper focused on online continuous control, not offline goal-conditioned maze tasks. A negative result here would still be meaningful if it is benchmarked carefully.
-
-Possible benchmark comparisons:
-
-- BC
-- IQL
-- CQL
-- ACA teacher
-- distilled ACA student
-
-This would turn the project into a transferability study of ACA.
-
-### Pivot Option 2: ACA as a latency-performance baseline against diffusion policies
+### Pivot Option 1: ACA as a prior-improvement method
 
 New question:
 
-Does ACA provide a better latency-performance tradeoff than diffusion-based policies in offline goal-conditioned control?
+Can ACA improve over a BC prior on offline control tasks?
 
-This is attractive because ACA’s biggest conceptual advantage is efficiency relative to diffusion-style action generation. Even if absolute AntMaze performance is weak, it may still be interesting to compare:
+This is a cleaner question than “can distilled ACA solve AntMaze?” because it isolates the key missing ingredient:
 
-- teacher latency
-- student latency
-- diffusion-policy latency
-- BC latency
+- is the teacher actually better than the prior?
 
-This could become a benchmarking project around inference cost rather than only raw return.
-
-### Pivot Option 3: Distillation only after a stronger teacher
+### Pivot Option 2: ACA benchmarking against offline RL baselines
 
 New question:
 
-Can ACA distillation work if the teacher is replaced or augmented by a stronger offline teacher?
+How does ACA compare with BC, IQL, and CQL on offline sparse long-horizon tasks?
 
-For example:
+This is scientifically useful even if ACA underperforms, because ACA has not been primarily evaluated in this regime.
 
-- use a stronger offline method as teacher
-- distill that policy into a lightweight student
-- compare the latency/performance tradeoff against ACA and BC
+### Pivot Option 3: ACA latency benchmarking
 
-This would preserve the distillation theme while reducing dependence on ACA solving AntMaze by itself.
+New question:
+
+What is the latency-performance tradeoff of prior, ACA teacher, and distilled student compared with other policy classes such as diffusion policies or standard offline RL actors?
+
+This leverages the strongest result currently available in the project:
+
+- the teacher is much slower
+- the feedforward policies are much faster
 
 ## Best Pivot Recommendation
 
-The strongest and most honest pivot is:
+The strongest pivot is:
 
-**Benchmark ACA and distilled ACA against BC and modern offline RL baselines on offline AntMaze, with a focus on both performance and inference latency.**
+Benchmark whether ACA can improve over a BC prior, and compare that to standard offline RL baselines such as IQL and CQL.
 
-Why this is a strong pivot:
+Why this is the best pivot:
 
-- it stays close to the original proposal
-- it uses the current codebase rather than discarding it
-- it turns the current failure into a research question
-- it produces a meaningful comparison even if ACA underperforms
-
-The resulting paper question becomes:
-
-Is ACA competitive outside its original online MuJoCo setting, and if not, where does it break down relative to offline baselines such as BC, IQL, and CQL?
-
-That is a real and interesting question.
+- it stays close to the current codebase
+- it uses the new prior-guided formulation directly
+- it turns the current negative result into a concrete research question
+- it avoids overclaiming that distillation is the main bottleneck when the teacher itself is still weak
 
 ## Short Conclusion
 
-At the current milestone, the project has succeeded technically but not yet empirically.
+At this milestone, the project improved substantially at the implementation and optimization level, but still did not achieve task success.
 
 Succeeded:
 
-- end-to-end ACA teacher implementation
-- end-to-end student distillation implementation
-- offline AntMaze training pipeline
-- latency evaluation showing roughly `150x` faster student inference
+- prior-guided ACA variant implemented
+- prior / teacher / student evaluation implemented
+- much more stable training behavior
+- very strong latency gap between teacher and feedforward policies
 
 Not yet succeeded:
 
-- teacher learning useful AntMaze behavior
-- student preserving useful teacher behavior
-- outperforming behavior cloning
+- prior solving AntMaze medium-diverse
+- teacher improving over the prior
+- student delivering useful control performance
 
-The most honest takeaway is that ACA adaptation to offline AntMaze is currently failing, and that failure points toward a more interesting next-stage question: whether ACA generalizes beyond its original benchmark regime, and how it compares against offline RL baselines in sparse long-horizon control.
+The most honest takeaway is:
+
+the project now has a better ACA adaptation and a much clearer experimental structure, but offline AntMaze medium-diverse still appears to be too hard for the current method.
+
+That makes the next-stage project question more precise and more interesting: whether ACA can improve a prior policy at all in offline or simpler goal-conditioned control, and how that compares to established offline RL baselines.
