@@ -18,6 +18,8 @@ class StudentDistillation:
         obs: torch.Tensor,
         teacher_action: torch.Tensor | None,
         dataset_action: torch.Tensor,
+        *,
+        behavior_cloning_coef: float | None = None,
     ) -> dict[str, float]:
         prediction = self.actor(obs)
         if teacher_action is None:
@@ -25,10 +27,13 @@ class StudentDistillation:
         else:
             distill_loss = F.mse_loss(prediction, teacher_action)
         bc_loss = F.mse_loss(prediction, dataset_action)
-        total = self.cfg.distill_coef * distill_loss + self.cfg.behavior_cloning_coef * bc_loss
+        bc_coef = self.cfg.behavior_cloning_coef if behavior_cloning_coef is None else behavior_cloning_coef
+        total = self.cfg.distill_coef * distill_loss + bc_coef * bc_loss
 
         self.optimizer.zero_grad(set_to_none=True)
         total.backward()
+        if self.cfg.grad_clip_norm is not None:
+            torch.nn.utils.clip_grad_norm_(self.actor.parameters(), self.cfg.grad_clip_norm)
         self.optimizer.step()
         return {
             "student/loss": total.item(),

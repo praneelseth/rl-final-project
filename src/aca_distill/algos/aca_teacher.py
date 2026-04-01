@@ -104,9 +104,16 @@ class ACATeacher:
         candidates = action.view(batch_size, num_candidates, self.action_dim)
         return self._select_best(obs, candidates, critic)
 
-    def loss(self, batch: dict[str, torch.Tensor], student_action: torch.Tensor | None = None) -> TeacherLosses:
+    def loss(
+        self,
+        batch: dict[str, torch.Tensor],
+        student_action: torch.Tensor | None = None,
+        *,
+        use_teacher_targets: bool = True,
+    ) -> TeacherLosses:
         obs = batch["obs"]
         action = batch["action"]
+        next_action_from_dataset = batch["next_action"]
         reward = batch["reward"]
         next_obs = batch["next_obs"]
         done = batch["done"]
@@ -115,7 +122,14 @@ class ACATeacher:
         q_data = self.critic(obs, action, zero_timestep)
 
         with torch.no_grad():
-            next_action = self.sample_actions(next_obs, critic=self.target_critic)
+            if use_teacher_targets:
+                next_action = self.sample_actions(
+                    next_obs,
+                    critic=self.target_critic,
+                    deterministic=self.cfg.deterministic_target_sampling,
+                )
+            else:
+                next_action = next_action_from_dataset
             next_q = self.target_critic(next_obs, next_action, zero_timestep)
             td_target = reward + self.cfg.discount * (1.0 - done) * next_q
 
@@ -144,7 +158,7 @@ class ACATeacher:
             torch.zeros(obs.shape[0] * self.cfg.conservative_actions, dtype=torch.long, device=obs.device),
         ).view(obs.shape[0], self.cfg.conservative_actions)
 
-        sampled_action = self.sample_actions(obs, num_candidates=1).detach()
+        sampled_action = self.sample_actions(obs, num_candidates=1, deterministic=True).detach()
         sampled_q = self.critic(obs, sampled_action, zero_timestep).unsqueeze(1)
         candidate_q = torch.cat([random_q, sampled_q], dim=1)
         if student_action is not None:
@@ -167,10 +181,18 @@ class ACATeacher:
             action_l2=action_l2,
         )
 
-    def update(self, batch: dict[str, torch.Tensor], student_action: torch.Tensor | None = None) -> dict[str, float]:
+    def update(
+        self,
+        batch: dict[str, torch.Tensor],
+        student_action: torch.Tensor | None = None,
+        *,
+        use_teacher_targets: bool = True,
+    ) -> dict[str, float]:
         self.optimizer.zero_grad(set_to_none=True)
-        losses = self.loss(batch, student_action=student_action)
+        losses = self.loss(batch, student_action=student_action, use_teacher_targets=use_teacher_targets)
         losses.total.backward()
+        if self.cfg.grad_clip_norm is not None:
+            torch.nn.utils.clip_grad_norm_(self.critic.parameters(), self.cfg.grad_clip_norm)
         self.optimizer.step()
 
         with torch.no_grad():
@@ -184,4 +206,3 @@ class ACATeacher:
             "teacher/conservative_loss": losses.conservative.item(),
             "teacher/action_l2": losses.action_l2.item(),
         }
-

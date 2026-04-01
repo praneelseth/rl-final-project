@@ -49,6 +49,9 @@ class TeacherConfig:
     conservative_coef: float = 0.1
     conservative_actions: int = 8
     action_l2_coef: float = 1e-4
+    dataset_target_warmstart_steps: int = 10_000
+    deterministic_target_sampling: bool = True
+    grad_clip_norm: float | None = 10.0
 
 
 @dataclass
@@ -59,6 +62,8 @@ class StudentConfig:
     distill_coef: float = 1.0
     behavior_cloning_coef: float = 0.25
     warmstart_behavior_cloning_steps: int = 5_000
+    warmstart_behavior_cloning_coef: float = 1.0
+    grad_clip_norm: float | None = 10.0
 
 
 @dataclass

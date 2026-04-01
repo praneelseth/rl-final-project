@@ -10,8 +10,8 @@ dataset:
 
 reward:
   mode: progress
-  distance_scale: 1.0
-  success_bonus: 1.0
+  distance_scale: 2.0
+  success_bonus: 5.0
   step_penalty: 0.0
   clip_value: 5.0
 
@@ -19,7 +19,7 @@ diffusion:
   steps: 20
   beta_start: 0.0001
   beta_end: 0.02
-  guidance_scale: 30.0
+  guidance_scale: 10.0
   batch_action_samples: 8
   gradient_epsilon: 1.0e-6
 
@@ -31,17 +31,22 @@ teacher:
   discount: 0.99
   tau: 0.005
   consistency_coef: 1.0
-  conservative_coef: 0.1
+  conservative_coef: 0.05
   conservative_actions: 8
   action_l2_coef: 1.0e-4
+  dataset_target_warmstart_steps: 10000
+  deterministic_target_sampling: true
+  grad_clip_norm: 10.0
 
 student:
   hidden_dim: 256
   hidden_layers: 3
   learning_rate: 0.0003
   distill_coef: 1.0
-  behavior_cloning_coef: 0.25
+  behavior_cloning_coef: 0.5
   warmstart_behavior_cloning_steps: 5000
+  warmstart_behavior_cloning_coef: 1.0
+  grad_clip_norm: 10.0
 
 training:
   seed: 11

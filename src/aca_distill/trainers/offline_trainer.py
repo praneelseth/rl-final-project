@@ -99,21 +99,34 @@ class OfflineAntMazeTrainer:
         averager = MetricAverager()
         for step in trange(1, self.cfg.training.total_steps + 1):
             batch = self.replay.sample(self.cfg.training.batch_size, self.device)
-            student_action = self.student.actor(batch["obs"]).detach()
+            use_teacher_targets = step > self.cfg.teacher.dataset_target_warmstart_steps
+            if step > self.cfg.student.warmstart_behavior_cloning_steps:
+                student_action = self.student.actor(batch["obs"]).detach()
+            else:
+                student_action = None
             for _ in range(self.cfg.training.teacher_updates_per_step):
-                averager.update(self.teacher.update(batch, student_action=student_action))
+                averager.update(
+                    self.teacher.update(
+                        batch,
+                        student_action=student_action,
+                        use_teacher_targets=use_teacher_targets,
+                    )
+                )
 
             if step <= self.cfg.student.warmstart_behavior_cloning_steps:
                 teacher_action = None
+                bc_coef = self.cfg.student.warmstart_behavior_cloning_coef
             else:
                 with torch.no_grad():
                     teacher_action = self.teacher.sample_actions(batch["obs"], deterministic=True)
+                bc_coef = self.cfg.student.behavior_cloning_coef
             for _ in range(self.cfg.training.student_updates_per_step):
                 averager.update(
                     self.student.update(
                         batch["obs"],
                         teacher_action=teacher_action,
                         dataset_action=batch["action"],
+                        behavior_cloning_coef=bc_coef,
                     )
                 )
 

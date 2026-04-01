@@ -35,6 +35,7 @@ def test_replay_buffer_returns_scalar_rewards_and_dones():
     replay = OfflineReplayBuffer(
         obs=torch.randn(10, 4),
         action=torch.randn(10, 2),
+        next_action=torch.randn(10, 2),
         reward=torch.randn(10),
         next_obs=torch.randn(10, 4),
         done=torch.zeros(10),
@@ -43,6 +44,7 @@ def test_replay_buffer_returns_scalar_rewards_and_dones():
         observation_std=None,
     )
     batch = replay.sample(batch_size=3, device=torch.device("cpu"))
+    assert batch["next_action"].shape == (3, 2)
     assert batch["reward"].shape == (3,)
     assert batch["done"].shape == (3,)
     assert batch["success"].shape == (3,)

@@ -66,6 +66,7 @@ def index_observation(obs_seq: Any, index: int) -> Any:
 class OfflineReplayBuffer:
     obs: torch.Tensor
     action: torch.Tensor
+    next_action: torch.Tensor
     reward: torch.Tensor
     next_obs: torch.Tensor
     done: torch.Tensor
@@ -90,6 +91,7 @@ class OfflineReplayBuffer:
         return {
             "obs": self.obs[indices].to(device),
             "action": self.action[indices].to(device),
+            "next_action": self.next_action[indices].to(device),
             "reward": self.reward[indices].to(device).squeeze(-1),
             "next_obs": self.next_obs[indices].to(device),
             "done": self.done[indices].to(device).squeeze(-1),
@@ -110,6 +112,7 @@ def load_antmaze_dataset(cfg: DatasetConfig, reward_cfg: RewardConfig) -> Offlin
 
     obs_list: list[np.ndarray] = []
     action_list: list[np.ndarray] = []
+    next_action_list: list[np.ndarray] = []
     reward_list: list[float] = []
     next_obs_list: list[np.ndarray] = []
     done_list: list[float] = []
@@ -127,9 +130,14 @@ def load_antmaze_dataset(cfg: DatasetConfig, reward_cfg: RewardConfig) -> Offlin
             reward = shaped_reward(obs, next_obs, env_reward, reward_cfg) if cfg.reward_mode == "shaped" else env_reward
             done = float(bool(episode.terminations[step]) or bool(episode.truncations[step]))
             success = antmaze_success(obs, next_obs, env_reward)
+            if step + 1 < horizon:
+                next_action = np.asarray(episode.actions[step + 1], dtype=np.float32)
+            else:
+                next_action = np.zeros_like(action, dtype=np.float32)
 
             obs_list.append(flatten_antmaze_observation(obs))
             action_list.append(action)
+            next_action_list.append(next_action)
             reward_list.append(reward)
             next_obs_list.append(flatten_antmaze_observation(next_obs))
             done_list.append(done)
@@ -138,6 +146,7 @@ def load_antmaze_dataset(cfg: DatasetConfig, reward_cfg: RewardConfig) -> Offlin
     obs_array = np.asarray(obs_list, dtype=np.float32)
     next_obs_array = np.asarray(next_obs_list, dtype=np.float32)
     action_array = np.asarray(action_list, dtype=np.float32)
+    next_action_array = np.asarray(next_action_list, dtype=np.float32)
     reward_array = np.asarray(reward_list, dtype=np.float32)
     done_array = np.asarray(done_list, dtype=np.float32)
     success_array = np.asarray(success_list, dtype=np.float32)
@@ -155,6 +164,7 @@ def load_antmaze_dataset(cfg: DatasetConfig, reward_cfg: RewardConfig) -> Offlin
     return OfflineReplayBuffer(
         obs=torch.from_numpy(obs_array),
         action=torch.from_numpy(action_array),
+        next_action=torch.from_numpy(next_action_array),
         reward=torch.from_numpy(reward_array),
         next_obs=torch.from_numpy(next_obs_array),
         done=torch.from_numpy(done_array),
