@@ -1,8 +1,9 @@
 import torch
 
+from aca_distill.algos.behavior_cloning import BehaviorCloningPrior
 from aca_distill.algos.distillation import StudentDistillation
-from aca_distill.config import StudentConfig
-from aca_distill.models.critic import NoiseLevelCritic
+from aca_distill.config import PriorConfig, StudentConfig
+from aca_distill.models.critic import DoubleNoiseLevelCritic, NoiseLevelCritic
 from aca_distill.models.student import StudentActor
 
 
@@ -36,3 +37,24 @@ def test_student_update_supports_bc_only_warmstart():
         behavior_cloning_coef=1.0,
     )
     assert metrics["student/distill_loss"] == 0.0
+
+
+def test_double_critic_returns_two_values_and_min_q():
+    critic = DoubleNoiseLevelCritic(obs_dim=7, action_dim=3)
+    obs = torch.randn(4, 7)
+    action = torch.randn(4, 3)
+    timestep = torch.randint(0, 10, (4,))
+    q1, q2 = critic(obs, action, timestep)
+    qmin = critic.min_q(obs, action, timestep)
+    assert q1.shape == (4,)
+    assert q2.shape == (4,)
+    assert qmin.shape == (4,)
+
+
+def test_behavior_cloning_prior_update_runs():
+    actor = StudentActor(obs_dim=6, action_dim=2)
+    prior = BehaviorCloningPrior(actor=actor, cfg=PriorConfig(pretrain_steps=1))
+    obs = torch.randn(4, 6)
+    action = torch.randn(4, 2).clamp(-1.0, 1.0)
+    metrics = prior.update(obs, action)
+    assert "prior/loss" in metrics

@@ -1,9 +1,11 @@
 import torch
 
 from aca_distill.algos.aca_teacher import ACATeacher
+from aca_distill.algos.behavior_cloning import BehaviorCloningPrior
 from aca_distill.algos.diffusion import DiffusionSchedule, add_noise
-from aca_distill.config import DiffusionConfig, TeacherConfig
-from aca_distill.models.critic import NoiseLevelCritic
+from aca_distill.config import DiffusionConfig, PriorConfig, TeacherConfig
+from aca_distill.models.critic import DoubleNoiseLevelCritic
+from aca_distill.models.student import StudentActor
 
 
 def test_diffusion_schedule_shapes():
@@ -24,10 +26,18 @@ def test_add_noise_preserves_shape():
 
 def test_teacher_update_supports_dataset_bootstrap_targets():
     device = torch.device("cpu")
-    critic = NoiseLevelCritic(obs_dim=5, action_dim=2)
+    critic = DoubleNoiseLevelCritic(obs_dim=5, action_dim=2)
+    prior_actor = StudentActor(obs_dim=5, action_dim=2)
+    prior = BehaviorCloningPrior(prior_actor, PriorConfig(pretrain_steps=1))
+    batch_bc = {
+        "obs": torch.randn(8, 5),
+        "action": torch.randn(8, 2).clamp(-1.0, 1.0),
+    }
+    prior.update(batch_bc["obs"], batch_bc["action"])
     schedule = DiffusionSchedule(steps=5, beta_start=1e-4, beta_end=2e-2, device=device)
     teacher = ACATeacher(
         critic=critic,
+        prior_actor=prior_actor,
         schedule=schedule,
         cfg=TeacherConfig(conservative_actions=2, dataset_target_warmstart_steps=10),
         diffusion_cfg=DiffusionConfig(steps=5, batch_action_samples=2),

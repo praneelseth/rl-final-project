@@ -14,14 +14,16 @@ That makes this both an RL project and a systems-style inference-efficiency proj
 
 ## Experiment Summary
 
-The experiment is organized around two policies:
+The experiment is organized around three policies:
 
-- Teacher: an ACA-style implicit policy that chooses actions by iterative critic-guided denoising
+- Prior: a behavior cloning policy trained directly on the offline dataset
+- Teacher: an ACA-style implicit policy that chooses actions by prior-guided critic denoising
 - Student: an explicit MLP actor trained to imitate the teacher's final denoised action
 
 The default setup is offline-first:
 
 - training data comes from Minari AntMaze datasets
+- a BC prior is pretrained first to stay close to dataset support
 - the teacher is trained from static transitions
 - the student is trained from teacher-generated supervision plus dataset actions
 - evaluation is done in a recovered AntMaze environment using sparse success
@@ -41,10 +43,13 @@ ACA removes the explicit actor. Instead, the policy is induced by the gradient f
 - `a_t` is a noisy action at diffusion step `t`
 - actions are sampled by starting from Gaussian noise and repeatedly refining the action using `grad_a Q(s, a_t, t)`
 
+In the original paper, the online version removes the behavior prior and uses critic-only guidance. In this repo, the offline AntMaze version keeps an explicit learned behavior prior so teacher sampling stays closer to dataset support.
+
 So in this repo:
 
+- the prior is a normal behavior-cloned actor
 - the teacher is not a normal actor network
-- the teacher is an implicit policy defined by denoising under the critic's gradient
+- the teacher is an implicit policy defined by denoising under both the prior and the critic gradient
 - the student is the fast distilled replacement for that implicit policy
 
 The main teacher implementation lives in [aca_teacher.py](/Users/pseth/Documents/GitHub/aca-distillation/src/aca_distill/algos/aca_teacher.py), and the timestep-conditioned critic lives in [critic.py](/Users/pseth/Documents/GitHub/aca-distillation/src/aca_distill/models/critic.py).
@@ -141,7 +146,7 @@ This means the milestone metric is still fundamentally:
 
 ### Training reward shaping
 
-For training, the default configs use a light progress-based shaped reward. The shaping function is:
+For training, the default configs use a light progress-based shaped reward and then scale the reward inside the critic target. The shaping function is:
 
 `shaped_reward = env_reward + progress_term + success_bonus - step_penalty`
 
@@ -202,11 +207,12 @@ Natural ablations later would be:
 
 ## Teacher Objective
 
-The teacher follows the ACA paper structure:
+The teacher follows the ACA paper structure, but adapts it to the offline setting with stronger behavior regularization:
 
 1. A TD loss at timestep `t = 0`
 2. A noisy consistency loss across diffusion steps
 3. A lightweight conservative offline regularizer
+4. A pretrained BC prior that anchors teacher sampling
 
 ### 1. TD loss at the denoised endpoint
 
@@ -246,14 +252,15 @@ This is intentionally lightweight rather than a full standalone CQL implementati
 
 ## Teacher Action Sampling
 
-Action sampling for the teacher is iterative.
+Action sampling for the teacher is iterative and prior-guided.
 
 Given a state:
 
-1. Start from Gaussian noise `a_T`.
+1. Start from a BC prior action plus small Gaussian noise.
 2. For `t = T, T-1, ..., 1`, compute `grad_a Q(s, a_t, t)`.
-3. Normalize the gradient.
-4. Apply the ACA-style denoising update.
+3. Compute a prior-guidance direction that pulls actions back toward the BC prior.
+4. Normalize the gradients.
+5. Apply the ACA-style denoising update with both prior guidance and critic guidance.
 5. Optionally sample several candidate actions.
 6. Pick the candidate with the highest final `Q(s, a_0, 0)`.
 
@@ -309,10 +316,13 @@ The main evaluation question is whether the student preserves useful behavior wh
 
 The current built-in evaluation reports:
 
+- prior return
+- prior success rate
 - teacher return
 - teacher success rate
 - student return
 - student success rate
+- prior latency in milliseconds
 - teacher latency in milliseconds
 - student latency in milliseconds
 

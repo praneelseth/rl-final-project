@@ -45,12 +45,25 @@ class TeacherConfig:
     learning_rate: float = 1e-3
     discount: float = 0.99
     tau: float = 0.005
+    reward_scale: float = 0.2
     consistency_coef: float = 1.0
     conservative_coef: float = 0.1
     conservative_actions: int = 8
     action_l2_coef: float = 1e-4
     dataset_target_warmstart_steps: int = 10_000
     deterministic_target_sampling: bool = True
+    grad_clip_norm: float | None = 10.0
+    prior_noise_scale: float = 0.1
+    prior_guidance_coef: float = 1.0
+    use_double_q: bool = True
+
+
+@dataclass
+class PriorConfig:
+    hidden_dim: int = 256
+    hidden_layers: int = 3
+    learning_rate: float = 3e-4
+    pretrain_steps: int = 20_000
     grad_clip_norm: float | None = 10.0
 
 
@@ -94,6 +107,7 @@ class ProjectConfig:
     reward: RewardConfig = field(default_factory=RewardConfig)
     diffusion: DiffusionConfig = field(default_factory=DiffusionConfig)
     teacher: TeacherConfig = field(default_factory=TeacherConfig)
+    prior: PriorConfig = field(default_factory=PriorConfig)
     student: StudentConfig = field(default_factory=StudentConfig)
     training: TrainingConfig = field(default_factory=TrainingConfig)
 
@@ -118,6 +132,7 @@ def load_config(path: str | Path) -> ProjectConfig:
         reward=_merge_dataclass(RewardConfig, raw.get("reward")),
         diffusion=_merge_dataclass(DiffusionConfig, raw.get("diffusion")),
         teacher=_merge_dataclass(TeacherConfig, raw.get("teacher")),
+        prior=_merge_dataclass(PriorConfig, raw.get("prior")),
         student=_merge_dataclass(StudentConfig, raw.get("student")),
         training=_merge_dataclass(TrainingConfig, raw.get("training")),
     )

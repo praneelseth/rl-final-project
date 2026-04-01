@@ -6,6 +6,7 @@ import torch
 from tqdm import trange
 
 from aca_distill.algos.aca_teacher import ACATeacher
+from aca_distill.algos.behavior_cloning import BehaviorCloningPrior
 from aca_distill.algos.distillation import StudentDistillation
 from aca_distill.config import ProjectConfig
 from aca_distill.data.antmaze import OfflineReplayBuffer
@@ -20,12 +21,14 @@ class OfflineAntMazeTrainer:
         self,
         cfg: ProjectConfig,
         replay: OfflineReplayBuffer,
+        prior: BehaviorCloningPrior,
         teacher: ACATeacher,
         student: StudentDistillation,
         device: torch.device,
     ) -> None:
         self.cfg = cfg
         self.replay = replay
+        self.prior = prior
         self.teacher = teacher
         self.student = student
         self.device = device
@@ -41,6 +44,10 @@ class OfflineAntMazeTrainer:
                 "target_critic": self.teacher.target_critic.state_dict(),
                 "optimizer": self.teacher.optimizer.state_dict(),
             },
+            "prior": {
+                "actor": self.prior.actor.state_dict(),
+                "optimizer": self.prior.optimizer.state_dict(),
+            },
             "student": {
                 "actor": self.student.actor.state_dict(),
                 "optimizer": self.student.optimizer.state_dict(),
@@ -53,6 +60,9 @@ class OfflineAntMazeTrainer:
 
     def _teacher_action_fn(self):
         return lambda obs: self.teacher.sample_actions(obs, deterministic=True)
+
+    def _prior_action_fn(self):
+        return lambda obs: self.prior.actor(obs)
 
     def _student_action_fn(self):
         return lambda obs: self.student.actor(obs)
@@ -67,6 +77,13 @@ class OfflineAntMazeTrainer:
         except Exception as exc:
             return {"eval/skipped": 1.0, "eval/error": 1.0}
 
+        prior_metrics = evaluate_policy(
+            env,
+            self._prior_action_fn(),
+            self.device,
+            episodes=self.cfg.training.eval_episodes,
+            max_steps=self.cfg.training.max_eval_steps,
+        )
         teacher_metrics = evaluate_policy(
             env,
             self._teacher_action_fn(),
@@ -82,14 +99,20 @@ class OfflineAntMazeTrainer:
             max_steps=self.cfg.training.max_eval_steps,
         )
         sample_obs = self.replay.obs[:32].to(self.device)
+        latency_prior = {
+            key.replace("latency/", "prior_latency/"): value
+            for key, value in measure_latency_ms(self._prior_action_fn(), sample_obs, repeats=20).items()
+        }
         latency_teacher = measure_latency_ms(self._teacher_action_fn(), sample_obs, repeats=20)
         latency_student = {
             key.replace("latency/", "student_latency/"): value
             for key, value in measure_latency_ms(self._student_action_fn(), sample_obs, repeats=20).items()
         }
         return {
+            **{key.replace("eval/", "prior_eval/"): value for key, value in prior_metrics.items()},
             **teacher_metrics,
             **{key.replace("eval/", "student_eval/"): value for key, value in student_metrics.items()},
+            **latency_prior,
             **latency_teacher,
             **latency_student,
         }
@@ -97,6 +120,14 @@ class OfflineAntMazeTrainer:
     def train(self) -> None:
         self.work_dir.mkdir(parents=True, exist_ok=True)
         averager = MetricAverager()
+
+        for step in trange(1, self.cfg.prior.pretrain_steps + 1, desc="prior"):
+            batch = self.replay.sample(self.cfg.training.batch_size, self.device)
+            averager.update(self.prior.update(batch["obs"], batch["action"]))
+            if step % self.cfg.training.log_every == 0:
+                self.logger.log({"prior_step": step, **averager.compute()})
+                averager.reset()
+
         for step in trange(1, self.cfg.training.total_steps + 1):
             batch = self.replay.sample(self.cfg.training.batch_size, self.device)
             use_teacher_targets = step > self.cfg.teacher.dataset_target_warmstart_steps
